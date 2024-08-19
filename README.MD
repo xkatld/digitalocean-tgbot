@@ -24,3 +24,5 @@ python3 main.py
 2. 在 [@botfather](https://t.me/botfather) 新建一个 `bot`，记下 `token`
 3. 编辑 `config.json`，填入相关配置
 4. `python3 main.py` 运行 `bot`
+
+5.强制设置开机密码修改'utils/set_root_password_script.py',{password}改为需要设置的密码就行
