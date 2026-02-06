@@ -31,9 +31,12 @@ func (h *Handler) HandleCommand(m *tgbotapi.Message) {
 func (h *Handler) sendMainMenu(chatID int64, text string) {
 	markup := tgbotapi.NewReplyKeyboard(
 		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("[添加] 添加账号"),
-			tgbotapi.NewKeyboardButton("[列表] 账号列表"),
-			tgbotapi.NewKeyboardButton("[创建] 创建实例"),
+			tgbotapi.NewKeyboardButton("添加账号"),
+			tgbotapi.NewKeyboardButton("账号列表"),
+		),
+		tgbotapi.NewKeyboardButtonRow(
+			tgbotapi.NewKeyboardButton("创建实例"),
+			tgbotapi.NewKeyboardButton("实例列表"),
 		),
 	)
 	markup.ResizeKeyboard = true
@@ -85,14 +88,17 @@ func (h *Handler) ProcessMessage(m *tgbotapi.Message) {
 	}
 
 	switch m.Text {
-	case "[添加] 添加账号":
+	case "添加账号":
 		h.addAccountStep1(m)
 		return
-	case "[列表] 账号列表":
+	case "账号列表":
 		h.listAccounts(m)
 		return
-	case "[创建] 创建实例":
+	case "创建实例":
 		h.createDropletStep1(m)
+		return
+	case "实例列表":
+		h.listDropletsSelector(m)
 		return
 	}
 
