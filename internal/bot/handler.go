@@ -489,7 +489,7 @@ func (h *Handler) showDropletInfo(query *tgbotapi.CallbackQuery, accID int64, dr
 
 	markup := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🗑 删除实例", fmt.Sprintf("dr_del:%d:%d", accID, drID)),
+			tgbotapi.NewInlineKeyboardButtonData("[删除] 删除实例", fmt.Sprintf("dr_del:%d:%d", accID, drID)),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("[返回] 实例列表", fmt.Sprintf("dr_list:%d", accID)),
@@ -506,7 +506,7 @@ func (h *Handler) confirmDeleteDroplet(query *tgbotapi.CallbackQuery, accID int6
 	text := "<b>[警告] 确认删除实例？</b>\n\n此操作不可逆，实例的所有数据将被永久清除。"
 	markup := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("‼️ 确认删除", fmt.Sprintf("dr_del_conf:%d:%d", accID, drID)),
+			tgbotapi.NewInlineKeyboardButtonData("[警告] 确认删除", fmt.Sprintf("dr_del_conf:%d:%d", accID, drID)),
 			tgbotapi.NewInlineKeyboardButtonData("取消", fmt.Sprintf("dr_info:%d:%d", accID, drID)),
 		),
 	)
