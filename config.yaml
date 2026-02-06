@@ -1,4 +1,6 @@
 BOT:
-  NAME: "DigitalOcean 小助手"
+  NAME: "DigitalOcean TGbot"
+  # 获取@BotFather
   TOKEN: ""
-  ADMINS: []
+  # 获取@get_id_bot
+  ADMINS: [""]
