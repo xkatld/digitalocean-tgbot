@@ -14,17 +14,14 @@ BOT:
 ## 部署
 
 ```bash
-ARCH=$(uname -m) && [ "$ARCH" = "x86_64" ] && T="amd64" || T="arm64"
-FILE="Linux-$T.tar.gz"
-URL=$(curl -s https://api.github.com/repos/xkatld/digitalocean-tgbot/releases/latest | grep "browser_download_url" | grep "$FILE" | cut -d '"' -f 4)
-curl -L -o $FILE $URL && tar -xzf $FILE && chmod +x Linux-$T
-nohup ./Linux-$T > bot.log 2>&1 &
+bash <(curl -sL https://raw.githubusercontent.com/xkatld/digitalocean-tgbot/refs/heads/main/install.sh)
 ```
 
 ## 升级
 
 ```bash
-pkill Linux- && ARCH=$(uname -m) && [ "$ARCH" = "x86_64" ] && T="amd64" || T="arm64" && FILE="Linux-$T.tar.gz" && URL=$(curl -s https://api.github.com/repos/xkatld/digitalocean-tgbot/releases/latest | grep "browser_download_url" | grep "$FILE" | cut -d '"' -f 4) && curl -L -o $FILE $URL && tar -xzf $FILE && chmod +x Linux-$T && nohup ./Linux-$T > bot.log 2>&1 &
+pkill Linux-
+bash <(curl -sL https://raw.githubusercontent.com/xkatld/digitalocean-tgbot/refs/heads/main/install.sh)
 ```
 
 ## 协议
