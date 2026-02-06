@@ -31,9 +31,9 @@ func (h *Handler) HandleCommand(m *tgbotapi.Message) {
 func (h *Handler) sendMainMenu(chatID int64, text string) {
 	markup := tgbotapi.NewReplyKeyboard(
 		tgbotapi.NewKeyboardButtonRow(
-			tgbotapi.NewKeyboardButton("➕ 添加账号"),
-			tgbotapi.NewKeyboardButton("📋 账号列表"),
-			tgbotapi.NewKeyboardButton("🚀 创建实例"),
+			tgbotapi.NewKeyboardButton("[添加] 添加账号"),
+			tgbotapi.NewKeyboardButton("[列表] 账号列表"),
+			tgbotapi.NewKeyboardButton("[创建] 创建实例"),
 		),
 	)
 	markup.ResizeKeyboard = true
@@ -86,13 +86,13 @@ func (h *Handler) ProcessMessage(m *tgbotapi.Message) {
 
 	// 处理键盘按钮
 	switch m.Text {
-	case "➕ 添加账号":
+	case "[添加] 添加账号":
 		h.addAccountStep1(m)
 		return
-	case "📋 账号列表":
+	case "[列表] 账号列表":
 		h.listAccounts(m)
 		return
-	case "🚀 创建实例":
+	case "[创建] 创建实例":
 		h.createDropletStep1(m)
 		return
 	}
@@ -176,7 +176,7 @@ func (h *Handler) HandleCallback(query *tgbotapi.CallbackQuery) {
 		h.executeCreate(query)
 	case "cr_cancel":
 		delete(userStates, query.From.ID)
-		h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "❌ 已取消创建"))
+		h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[注意] 已取消创建"))
 	}
 }
 
@@ -204,7 +204,7 @@ func (h *Handler) executeCreate(query *tgbotapi.CallbackQuery) {
 	password := h.generatePassword(12)
 	userData := fmt.Sprintf("#!/bin/bash\necho root:%s | chpasswd", password)
 
-	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "🚀 正在创建实例，请稍候..."))
+	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[注意] 正在创建实例，请稍候..."))
 
 	droplet, err := client.CreateDroplet(context.Background(), state.Name, state.Region, state.Size, state.Image, userData)
 	if err != nil {
@@ -230,7 +230,7 @@ func (h *Handler) executeCreate(query *tgbotapi.CallbackQuery) {
 						break
 					}
 				}
-				msg := fmt.Sprintf("✅ <b>实例创建完成</b>\n\n名称: <code>%s</code>\nIP: <code>%s</code>\n密码: <code>%s</code>", d.Name, ip, p)
+				msg := fmt.Sprintf("[正确] <b>实例创建完成</b>\n\n名称: <code>%s</code>\nIP: <code>%s</code>\n密码: <code>%s</code>", d.Name, ip, p)
 				res := tgbotapi.NewMessage(query.From.ID, msg)
 				res.ParseMode = "HTML"
 				h.Bot.Send(res)
@@ -302,8 +302,8 @@ func (h *Handler) createDropletStep2(query *tgbotapi.CallbackQuery, accID int64)
 		}
 	}
 	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("🔙 上一步", "cr_back:step1"),
-		tgbotapi.NewInlineKeyboardButtonData("❌ 取消", "cr_cancel"),
+		tgbotapi.NewInlineKeyboardButtonData("[返回] 上一步", "cr_back:step1"),
+		tgbotapi.NewInlineKeyboardButtonData("[取消] 取消", "cr_cancel"),
 	))
 
 	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "<b>创建实例</b>\n请选择地区:")
@@ -346,8 +346,8 @@ func (h *Handler) createDropletStep3(query *tgbotapi.CallbackQuery, region strin
 		}
 	}
 	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("🔙 上一步", "cr_back:step2"),
-		tgbotapi.NewInlineKeyboardButtonData("❌ 取消", "cr_cancel"),
+		tgbotapi.NewInlineKeyboardButtonData("[返回] 上一步", "cr_back:step2"),
+		tgbotapi.NewInlineKeyboardButtonData("[取消] 取消", "cr_cancel"),
 	))
 
 	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "<b>创建实例</b>\n请选择配置:")
@@ -373,8 +373,8 @@ func (h *Handler) createDropletStep4(query *tgbotapi.CallbackQuery, size string)
 		markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(btn))
 	}
 	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("🔙 上一步", "cr_back:step3"),
-		tgbotapi.NewInlineKeyboardButtonData("❌ 取消", "cr_cancel"),
+		tgbotapi.NewInlineKeyboardButtonData("[返回] 上一步", "cr_back:step3"),
+		tgbotapi.NewInlineKeyboardButtonData("[取消] 取消", "cr_cancel"),
 	))
 
 	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "<b>创建实例</b>\n请选择镜像:")
@@ -389,8 +389,8 @@ func (h *Handler) createDropletStep5(query *tgbotapi.CallbackQuery, image string
 
 	markup := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🔙 上一步", "cr_back:step4"),
-			tgbotapi.NewInlineKeyboardButtonData("❌ 取消", "cr_cancel"),
+			tgbotapi.NewInlineKeyboardButtonData("[返回] 上一步", "cr_back:step4"),
+			tgbotapi.NewInlineKeyboardButtonData("[取消] 取消", "cr_cancel"),
 		),
 	)
 
