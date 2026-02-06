@@ -2,14 +2,16 @@ package config
 
 import (
 	"os"
+	"strconv"
+
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
 	Bot struct {
-		Name   string  `yaml:"NAME"`
-		Token  string  `yaml:"TOKEN"`
-		Admins []int64 `yaml:"ADMINS"`
+		Name  string `yaml:"NAME"`
+		Token string `yaml:"TOKEN"`
+		Admin string `yaml:"ADMINS"`
 	} `yaml:"BOT"`
 }
 
@@ -26,10 +28,5 @@ func Load() *Config {
 }
 
 func (c *Config) IsAdmin(userID int64) bool {
-	for _, admin := range c.Bot.Admins {
-		if admin == userID {
-			return true
-		}
-	}
-	return false
+	return strconv.FormatInt(userID, 10) == c.Bot.Admin
 }

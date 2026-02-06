@@ -4,14 +4,13 @@ DigitalOcean 账号余额与资源监控 Telegram 机器人。
 
 ## 展示
 
-配置
 ~~~
 BOT:
   NAME: "DigitalOcean TGbot"
   # 获取@BotFather
   TOKEN: ""
   # 获取@get_id_bot
-  ADMINS: [""]
+  ADMINS: ""
 ~~~ 
 
 ## 部署

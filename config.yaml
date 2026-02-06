@@ -3,4 +3,4 @@ BOT:
   # 获取@BotFather
   TOKEN: ""
   # 获取@get_id_bot
-  ADMINS: [""]
+  ADMINS: ""
