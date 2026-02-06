@@ -1,15 +1,7 @@
 name: Build and Release
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
-    inputs:
-      tag_name:
-        description: '发布标签版本 (例如 v1.0.0)'
-        required: true
-        default: 'v0.0.1'
 
 jobs:
   build:
@@ -31,12 +23,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: digitalocean-tgbot-binaries
-          path: dist/*.tar.gz
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          files: dist/*.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: |
+            dist/Linux-amd64.tar.gz
+            dist/Linux-arm64.tar.gz
