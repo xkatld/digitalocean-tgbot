@@ -55,3 +55,14 @@ func (c *Client) GetDroplet(ctx context.Context, id int) (*godo.Droplet, error) 
 	droplet, _, err := c.Droplets.Get(ctx, id)
 	return droplet, err
 }
+
+func (c *Client) ListDroplets(ctx context.Context) ([]godo.Droplet, error) {
+	opt := &godo.ListOptions{PerPage: 200}
+	list, _, err := c.Droplets.List(ctx, opt)
+	return list, err
+}
+
+func (c *Client) DeleteDroplet(ctx context.Context, id int) error {
+	_, err := c.Droplets.Delete(ctx, id)
+	return err
+}

@@ -1,4 +1,3 @@
-#!/bin/bash
 
 DIST_DIR="dist"
 CONFIG_FILE="config.yaml"
@@ -15,15 +14,12 @@ build_and_pack() {
     
     echo "正在构建: $OUT_NAME ..."
     
-    # 编译，输出文件名直接设为目标架构名
     CGO_ENABLED=0 GOOS=$OS GOARCH=$ARCH go build -o $DIST_DIR/$OUT_NAME main.go
     
     if [ $? -eq 0 ]; then
         cd $DIST_DIR
         cp "../$CONFIG_FILE" .
-        # 打包时包含同名二进制
         tar -czf "${OUT_NAME}.tar.gz" "$OUT_NAME" "$CONFIG_FILE"
-        # 清理临时文件
         rm "$OUT_NAME" "$CONFIG_FILE"
         cd ..
         echo "[成功] 已打包: ${OUT_NAME}.tar.gz"

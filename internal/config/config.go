@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strconv"
 
@@ -18,12 +19,20 @@ type Config struct {
 func Load() *Config {
 	f, err := os.ReadFile("config.yaml")
 	if err != nil {
-		panic(err)
+		log.Fatalf("读取配置文件失败: %v", err)
 	}
 	var cfg Config
 	if err := yaml.Unmarshal(f, &cfg); err != nil {
-		panic(err)
+		log.Fatalf("解析配置文件失败: %v", err)
 	}
+
+	if cfg.Bot.Token == "" {
+		log.Fatal("配置文件错误: [BOT][TOKEN] 不能为空")
+	}
+	if cfg.Bot.Admin == "" {
+		log.Fatal("配置文件错误: [BOT][ADMINS] 不能为空")
+	}
+
 	return &cfg
 }
 

@@ -7,21 +7,24 @@ DigitalOcean 账号余额与资源监控 Telegram 机器人。
 ~~~
 BOT:
   NAME: "DigitalOcean TGbot"
-  # 获取@BotFather
   TOKEN: ""
-  # 获取@get_id_bot
   ADMINS: ""
 ~~~ 
 
 ## 部署
 
 ```bash
-# 下载 linux-amd64 版本并运行
-curl -L -o Linux-amd64.tar.gz $(curl -s https://api.github.com/repos/xkatld/digitalocean-tgbot/releases/latest | grep "browser_download_url" | grep "Linux-amd64.tar.gz" | cut -d '"' -f 4)
-tar -xzf Linux-amd64.tar.gz
-chmod +x Linux-amd64
-# 修改 config.yaml 后运行
-nohup ./Linux-amd64 > bot.log 2>&1 &
+ARCH=$(uname -m) && [ "$ARCH" = "x86_64" ] && T="amd64" || T="arm64"
+FILE="Linux-$T.tar.gz"
+URL=$(curl -s https://api.github.com/repos/xkatld/digitalocean-tgbot/releases/latest | grep "browser_download_url" | grep "$FILE" | cut -d '"' -f 4)
+curl -L -o $FILE $URL && tar -xzf $FILE && chmod +x Linux-$T
+nohup ./Linux-$T > bot.log 2>&1 &
+```
+
+## 升级
+
+```bash
+pkill Linux- && ARCH=$(uname -m) && [ "$ARCH" = "x86_64" ] && T="amd64" || T="arm64" && FILE="Linux-$T.tar.gz" && URL=$(curl -s https://api.github.com/repos/xkatld/digitalocean-tgbot/releases/latest | grep "browser_download_url" | grep "$FILE" | cut -d '"' -f 4) && curl -L -o $FILE $URL && tar -xzf $FILE && chmod +x Linux-$T && nohup ./Linux-$T > bot.log 2>&1 &
 ```
 
 ## 协议

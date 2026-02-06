@@ -14,11 +14,11 @@ func main() {
 
 	tgbot, err := tgbotapi.NewBotAPI(cfg.Bot.Token)
 	if err != nil {
-		log.Panic(err)
+		log.Fatalf("Bot 登录失败: %v", err)
 	}
 
 	tgbot.Debug = false
-	log.Printf("Authorized on account %s", tgbot.Self.UserName)
+	log.Printf("认证成功: %s", tgbot.Self.UserName)
 
 	h := bot.NewHandler(tgbot, database)
 

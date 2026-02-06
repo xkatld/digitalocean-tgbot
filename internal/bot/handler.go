@@ -84,7 +84,6 @@ func (h *Handler) ProcessMessage(m *tgbotapi.Message) {
 		return
 	}
 
-	// 处理键盘按钮
 	switch m.Text {
 	case "[添加] 添加账号":
 		h.addAccountStep1(m)
@@ -151,7 +150,6 @@ func (h *Handler) HandleCallback(query *tgbotapi.CallbackQuery) {
 	parts := strings.Split(data, ":")
 	cmd := parts[0]
 
-	// 回调反馈
 	h.Bot.Request(tgbotapi.NewCallback(query.ID, ""))
 
 	switch cmd {
@@ -177,6 +175,21 @@ func (h *Handler) HandleCallback(query *tgbotapi.CallbackQuery) {
 	case "cr_cancel":
 		delete(userStates, query.From.ID)
 		h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[注意] 已取消创建"))
+	case "dr_list":
+		accID, _ := strconv.ParseInt(parts[1], 10, 64)
+		h.listDroplets(query, accID)
+	case "dr_info":
+		accID, _ := strconv.ParseInt(parts[1], 10, 64)
+		drID, _ := strconv.Atoi(parts[2])
+		h.showDropletInfo(query, accID, drID)
+	case "dr_del":
+		accID, _ := strconv.ParseInt(parts[1], 10, 64)
+		drID, _ := strconv.Atoi(parts[2])
+		h.confirmDeleteDroplet(query, accID, drID)
+	case "dr_del_conf":
+		accID, _ := strconv.ParseInt(parts[1], 10, 64)
+		drID, _ := strconv.Atoi(parts[2])
+		h.executeDeleteDroplet(query, accID, drID)
 	}
 }
 
@@ -214,7 +227,6 @@ func (h *Handler) executeCreate(query *tgbotapi.CallbackQuery) {
 
 	delete(userStates, query.From.ID)
 
-	// 异步轮询状态
 	go func(dID int, p string) {
 		for {
 			time.Sleep(5 * time.Second)
@@ -409,7 +421,11 @@ func (h *Handler) showAccountInfo(query *tgbotapi.CallbackQuery, id int64) {
 	text := fmt.Sprintf("<b>账号详情</b>\n\n邮箱: <code>%s</code>", acc.Email)
 	markup := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("管理实例", fmt.Sprintf("dr_list:%d", id)),
 			tgbotapi.NewInlineKeyboardButtonData("删除账号", fmt.Sprintf("acc_del:%d", id)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("[返回] 账号列表", "cr_back:step1"),
 		),
 	)
 
@@ -417,6 +433,102 @@ func (h *Handler) showAccountInfo(query *tgbotapi.CallbackQuery, id int64) {
 	edit.ParseMode = "HTML"
 	edit.ReplyMarkup = &markup
 	h.Bot.Send(edit)
+}
+
+func (h *Handler) listDroplets(query *tgbotapi.CallbackQuery, accID int64) {
+	acc, _ := h.DB.GetAccount(accID)
+	client := do.NewClient(acc.Token)
+	list, err := client.ListDroplets(context.Background())
+	if err != nil {
+		h.sendText(query.From.ID, "获取实例列表失败: "+err.Error())
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("<b>实例列表 (%s):</b>\n\n", acc.Email))
+	markup := tgbotapi.NewInlineKeyboardMarkup()
+
+	if len(list) == 0 {
+		sb.WriteString("暂无活跃实例")
+	} else {
+		for _, dr := range list {
+			btn := tgbotapi.NewInlineKeyboardButtonData(dr.Name, fmt.Sprintf("dr_info:%d:%d", accID, dr.ID))
+			markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(btn))
+		}
+	}
+
+	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("[返回] 账号详情", fmt.Sprintf("acc_info:%d", accID)),
+	))
+
+	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, sb.String())
+	edit.ParseMode = "HTML"
+	edit.ReplyMarkup = &markup
+	h.Bot.Send(edit)
+}
+
+func (h *Handler) showDropletInfo(query *tgbotapi.CallbackQuery, accID int64, drID int) {
+	acc, _ := h.DB.GetAccount(accID)
+	client := do.NewClient(acc.Token)
+	dr, err := client.GetDroplet(context.Background(), drID)
+	if err != nil {
+		h.sendText(query.From.ID, "获取实例详情失败: "+err.Error())
+		return
+	}
+
+	var ip string
+	for _, net := range dr.Networks.V4 {
+		if net.Type == "public" {
+			ip = net.IPAddress
+			break
+		}
+	}
+
+	text := fmt.Sprintf("<b>实例详情</b>\n\n名称: <code>%s</code>\nIP: <code>%s</code>\n地区: %s\n配置: %s\n状态: %s",
+		dr.Name, ip, dr.Region.Slug, dr.SizeSlug, dr.Status)
+
+	markup := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🗑 删除实例", fmt.Sprintf("dr_del:%d:%d", accID, drID)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("[返回] 实例列表", fmt.Sprintf("dr_list:%d", accID)),
+		),
+	)
+
+	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, text)
+	edit.ParseMode = "HTML"
+	edit.ReplyMarkup = &markup
+	h.Bot.Send(edit)
+}
+
+func (h *Handler) confirmDeleteDroplet(query *tgbotapi.CallbackQuery, accID int64, drID int) {
+	text := "<b>[警告] 确认删除实例？</b>\n\n此操作不可逆，实例的所有数据将被永久清除。"
+	markup := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("‼️ 确认删除", fmt.Sprintf("dr_del_conf:%d:%d", accID, drID)),
+			tgbotapi.NewInlineKeyboardButtonData("取消", fmt.Sprintf("dr_info:%d:%d", accID, drID)),
+		),
+	)
+
+	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, text)
+	edit.ParseMode = "HTML"
+	edit.ReplyMarkup = &markup
+	h.Bot.Send(edit)
+}
+
+func (h *Handler) executeDeleteDroplet(query *tgbotapi.CallbackQuery, accID int64, drID int) {
+	acc, _ := h.DB.GetAccount(accID)
+	client := do.NewClient(acc.Token)
+	err := client.DeleteDroplet(context.Background(), drID)
+	if err != nil {
+		h.sendText(query.From.ID, "删除失败: "+err.Error())
+		return
+	}
+
+	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[正确] 实例删除请求已发送，正在销毁..."))
+	time.Sleep(2 * time.Second)
+	h.listDroplets(query, accID)
 }
 
 func (h *Handler) deleteAccount(query *tgbotapi.CallbackQuery, id int64) {
