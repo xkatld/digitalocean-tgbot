@@ -30,7 +30,7 @@ bash <(curl -sL https://raw.githubusercontent.com/xkatld/digitalocean-tgbot/refs
 
 ## 声明
 
-[重要] **禁止商用**。
+[注意] **禁止商用**。
 [注意] **必须署名**。
 
 本项目仅用于个人学习与研究，未经许可不得用于商业盈利。

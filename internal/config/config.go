@@ -27,10 +27,10 @@ func Load() *Config {
 	}
 
 	if cfg.Bot.Token == "" {
-		log.Fatal("配置文件错误: [BOT][TOKEN] 不能为空")
+		log.Fatal("配置文件错误: BOT/TOKEN 不能为空")
 	}
 	if cfg.Bot.Admin == "" {
-		log.Fatal("配置文件错误: [BOT][ADMINS] 不能为空")
+		log.Fatal("配置文件错误: BOT/ADMINS 不能为空")
 	}
 
 	return &cfg

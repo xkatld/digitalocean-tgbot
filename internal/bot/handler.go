@@ -320,8 +320,8 @@ func (h *Handler) createDropletStep2(query *tgbotapi.CallbackQuery, accID int64)
 		}
 	}
 	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("[返回] 上一步", "cr_back:step1"),
-		tgbotapi.NewInlineKeyboardButtonData("[取消] 取消", "cr_cancel"),
+		tgbotapi.NewInlineKeyboardButtonData("返回 上一步", "cr_back:step1"),
+		tgbotapi.NewInlineKeyboardButtonData("取消", "cr_cancel"),
 	))
 
 	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "<b>创建实例</b>\n请选择地区:")
@@ -364,8 +364,8 @@ func (h *Handler) createDropletStep3(query *tgbotapi.CallbackQuery, region strin
 		}
 	}
 	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("[返回] 上一步", "cr_back:step2"),
-		tgbotapi.NewInlineKeyboardButtonData("[取消] 取消", "cr_cancel"),
+		tgbotapi.NewInlineKeyboardButtonData("返回 上一步", "cr_back:step2"),
+		tgbotapi.NewInlineKeyboardButtonData("取消", "cr_cancel"),
 	))
 
 	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "<b>创建实例</b>\n请选择配置:")
@@ -391,8 +391,8 @@ func (h *Handler) createDropletStep4(query *tgbotapi.CallbackQuery, size string)
 		markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(btn))
 	}
 	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("[返回] 上一步", "cr_back:step3"),
-		tgbotapi.NewInlineKeyboardButtonData("[取消] 取消", "cr_cancel"),
+		tgbotapi.NewInlineKeyboardButtonData("返回 上一步", "cr_back:step3"),
+		tgbotapi.NewInlineKeyboardButtonData("取消", "cr_cancel"),
 	))
 
 	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "<b>创建实例</b>\n请选择镜像:")
@@ -407,8 +407,8 @@ func (h *Handler) createDropletStep5(query *tgbotapi.CallbackQuery, image string
 
 	markup := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("[返回] 上一步", "cr_back:step4"),
-			tgbotapi.NewInlineKeyboardButtonData("[取消] 取消", "cr_cancel"),
+			tgbotapi.NewInlineKeyboardButtonData("返回 上一步", "cr_back:step4"),
+			tgbotapi.NewInlineKeyboardButtonData("取消", "cr_cancel"),
 		),
 	)
 
@@ -431,7 +431,7 @@ func (h *Handler) showAccountInfo(query *tgbotapi.CallbackQuery, id int64) {
 			tgbotapi.NewInlineKeyboardButtonData("删除账号", fmt.Sprintf("acc_del:%d", id)),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("[返回] 账号列表", "cr_back:step1"),
+			tgbotapi.NewInlineKeyboardButtonData("返回 账号列表", "cr_back:step1"),
 		),
 	)
 
@@ -439,6 +439,23 @@ func (h *Handler) showAccountInfo(query *tgbotapi.CallbackQuery, id int64) {
 	edit.ParseMode = "HTML"
 	edit.ReplyMarkup = &markup
 	h.Bot.Send(edit)
+}
+
+func (h *Handler) listDropletsSelector(m *tgbotapi.Message) {
+	accounts, _ := h.DB.ListAccounts()
+	if len(accounts) == 0 {
+		h.sendText(m.Chat.ID, "请先添加账号")
+		return
+	}
+	markup := tgbotapi.NewInlineKeyboardMarkup()
+	for _, acc := range accounts {
+		btn := tgbotapi.NewInlineKeyboardButtonData(acc.Email, fmt.Sprintf("dr_list:%d", acc.ID))
+		markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(btn))
+	}
+	msg := tgbotapi.NewMessage(m.Chat.ID, "<b>管理实例</b>\n请选择账号:")
+	msg.ParseMode = "HTML"
+	msg.ReplyMarkup = markup
+	h.Bot.Send(msg)
 }
 
 func (h *Handler) listDroplets(query *tgbotapi.CallbackQuery, accID int64) {
@@ -464,7 +481,7 @@ func (h *Handler) listDroplets(query *tgbotapi.CallbackQuery, accID int64) {
 	}
 
 	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("[返回] 账号详情", fmt.Sprintf("acc_info:%d", accID)),
+		tgbotapi.NewInlineKeyboardButtonData("返回 账号详情", fmt.Sprintf("acc_info:%d", accID)),
 	))
 
 	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, sb.String())
@@ -495,10 +512,10 @@ func (h *Handler) showDropletInfo(query *tgbotapi.CallbackQuery, accID int64, dr
 
 	markup := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("[删除] 删除实例", fmt.Sprintf("dr_del:%d:%d", accID, drID)),
+			tgbotapi.NewInlineKeyboardButtonData("删除 实例详情", fmt.Sprintf("dr_del:%d:%d", accID, drID)),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("[返回] 实例列表", fmt.Sprintf("dr_list:%d", accID)),
+			tgbotapi.NewInlineKeyboardButtonData("返回 实例列表", fmt.Sprintf("dr_list:%d", accID)),
 		),
 	)
 
@@ -509,10 +526,10 @@ func (h *Handler) showDropletInfo(query *tgbotapi.CallbackQuery, accID int64, dr
 }
 
 func (h *Handler) confirmDeleteDroplet(query *tgbotapi.CallbackQuery, accID int64, drID int) {
-	text := "<b>[警告] 确认删除实例？</b>\n\n此操作不可逆，实例的所有数据将被永久清除。"
+	text := "<b>[注意] 确认删除实例？</b>\n\n此操作不可逆，实例的所有数据将被永久清除。"
 	markup := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("[警告] 确认删除", fmt.Sprintf("dr_del_conf:%d:%d", accID, drID)),
+			tgbotapi.NewInlineKeyboardButtonData("[注意] 确认删除", fmt.Sprintf("dr_del_conf:%d:%d", accID, drID)),
 			tgbotapi.NewInlineKeyboardButtonData("取消", fmt.Sprintf("dr_info:%d:%d", accID, drID)),
 		),
 	)

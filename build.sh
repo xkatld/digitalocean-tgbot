@@ -22,7 +22,7 @@ build_and_pack() {
         tar -czf "${OUT_NAME}.tar.gz" "$OUT_NAME" "$CONFIG_FILE"
         rm "$OUT_NAME" "$CONFIG_FILE"
         cd ..
-        echo "[成功] 已打包: ${OUT_NAME}.tar.gz"
+        echo "[正确] 已打包: ${OUT_NAME}.tar.gz"
     else
         echo "[错误] 构建失败: $OUT_NAME"
     fi

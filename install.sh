@@ -23,7 +23,7 @@ chmod +x "Linux-$T"
 
 if [ -f config.yaml.bak ]; then
     mv config.yaml.bak config.yaml
-    echo "[信息] 已恢复现有配置文件"
+    echo "[正确] 已恢复现有配置文件"
 else
     if grep -q "__TOKEN__" config.yaml; then
         echo ">>> 检测到首次安装，开始配置环境:"
