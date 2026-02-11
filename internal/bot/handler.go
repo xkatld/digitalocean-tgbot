@@ -340,7 +340,6 @@ func (h *Handler) createDropletStep3(query *tgbotapi.CallbackQuery, region strin
 
 	markup := tgbotapi.NewInlineKeyboardMarkup()
 	var row []tgbotapi.InlineKeyboardButton
-	count := 0
 	for _, s := range sizes {
 		found := false
 		for _, r := range s.Regions {
@@ -354,14 +353,13 @@ func (h *Handler) createDropletStep3(query *tgbotapi.CallbackQuery, region strin
 		}
 		btn := tgbotapi.NewInlineKeyboardButtonData(s.Slug, fmt.Sprintf("cr_size:%s", s.Slug))
 		row = append(row, btn)
-		count++
 		if len(row) == 2 {
 			markup.InlineKeyboard = append(markup.InlineKeyboard, row)
 			row = []tgbotapi.InlineKeyboardButton{}
 		}
-		if count > 10 {
-			break
-		}
+	}
+	if len(row) > 0 {
+		markup.InlineKeyboard = append(markup.InlineKeyboard, row)
 	}
 	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData("返回 上一步", "cr_back:step2"),

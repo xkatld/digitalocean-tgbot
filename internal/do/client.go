@@ -24,12 +24,14 @@ func (c *Client) GetAccount(ctx context.Context) (*godo.Account, error) {
 }
 
 func (c *Client) ListRegions(ctx context.Context) ([]godo.Region, error) {
-	regions, _, err := c.Regions.List(ctx, nil)
+	opt := &godo.ListOptions{PerPage: 200}
+	regions, _, err := c.Regions.List(ctx, opt)
 	return regions, err
 }
 
 func (c *Client) ListSizes(ctx context.Context) ([]godo.Size, error) {
-	sizes, _, err := c.Sizes.List(ctx, nil)
+	opt := &godo.ListOptions{PerPage: 200}
+	sizes, _, err := c.Sizes.List(ctx, opt)
 	return sizes, err
 }
 
