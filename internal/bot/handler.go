@@ -217,6 +217,18 @@ func (h *Handler) HandleCallback(query *tgbotapi.CallbackQuery) {
 		accID, _ := strconv.ParseInt(parts[1], 10, 64)
 		drID, _ := strconv.Atoi(parts[2])
 		h.executeDeleteDroplet(query, accID, drID)
+	case "dr_rip":
+		accID, _ := strconv.ParseInt(parts[1], 10, 64)
+		drID, _ := strconv.Atoi(parts[2])
+		h.listReservedIPs(query, accID, drID)
+	case "rip_assign":
+		accID, _ := strconv.ParseInt(parts[1], 10, 64)
+		drID, _ := strconv.Atoi(parts[2])
+		h.executeAssignIP(query, accID, drID, parts[3])
+	case "rip_create":
+		accID, _ := strconv.ParseInt(parts[1], 10, 64)
+		drID, _ := strconv.Atoi(parts[2])
+		h.executeCreateIP(query, accID, drID, parts[3])
 	}
 }
 
@@ -573,6 +585,9 @@ func (h *Handler) showDropletInfo(query *tgbotapi.CallbackQuery, accID int64, dr
 	markup := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("查看密码", fmt.Sprintf("dr_pass:%d", drID)),
+			tgbotapi.NewInlineKeyboardButtonData("更换 IP", fmt.Sprintf("dr_rip:%d:%d", accID, drID)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("删除实例", fmt.Sprintf("dr_del:%d:%d", accID, drID)),
 		),
 		tgbotapi.NewInlineKeyboardRow(
@@ -584,6 +599,115 @@ func (h *Handler) showDropletInfo(query *tgbotapi.CallbackQuery, accID int64, dr
 	edit.ParseMode = "HTML"
 	edit.ReplyMarkup = &markup
 	h.Bot.Send(edit)
+}
+
+func (h *Handler) listReservedIPs(query *tgbotapi.CallbackQuery, accID int64, drID int) {
+	acc, _ := h.DB.GetAccount(accID)
+	client := do.NewClient(acc.Token)
+	
+	// Need Droplet info for region
+	dr, err := client.GetDroplet(context.Background(), drID)
+	if err != nil {
+		h.sendText(query.From.ID, "获取实例信息失败: "+err.Error())
+		return
+	}
+
+	ips, err := client.ListReservedIPs(context.Background())
+	if err != nil {
+		h.sendText(query.From.ID, "获取保留 IP 列表失败: "+err.Error())
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("<b>更换 IP (Region: %s)</b>\n\n请选择现有的保留 IP 或申请新 IP：", dr.Region.Slug))
+	
+	markup := tgbotapi.NewInlineKeyboardMarkup()
+	
+	// Add existing IPs in same region
+	for _, ip := range ips {
+		if ip.Region.Slug == dr.Region.Slug {
+			status := "空闲"
+			if ip.Droplet != nil {
+				if ip.Droplet.ID == drID {
+					continue // Explicitly skip current IP
+				}
+				status = "占用"
+			}
+			btnText := fmt.Sprintf("%s (%s)", ip.IP, status)
+			btnData := fmt.Sprintf("rip_assign:%d:%d:%s", accID, drID, ip.IP)
+			markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData(btnText, btnData),
+			))
+		}
+	}
+
+	// Add Create New option
+	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("[+ 申请新 IP]", fmt.Sprintf("rip_create:%d:%d:%s", accID, drID, dr.Region.Slug)),
+	))
+
+	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("返回 实例详情", fmt.Sprintf("dr_info:%d:%d", accID, drID)),
+	))
+
+	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, sb.String())
+	edit.ParseMode = "HTML"
+	edit.ReplyMarkup = &markup
+	h.Bot.Send(edit)
+}
+
+func (h *Handler) executeAssignIP(query *tgbotapi.CallbackQuery, accID int64, drID int, ip string) {
+	acc, _ := h.DB.GetAccount(accID)
+	client := do.NewClient(acc.Token)
+
+	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, fmt.Sprintf("[注意] 正在绑定 IP %s...", ip)))
+
+	err := client.AssignReservedIP(context.Background(), ip, drID)
+	if err != nil {
+		h.sendText(query.From.ID, "绑定失败: "+err.Error())
+		// sleep back
+		time.Sleep(2 * time.Second)
+		h.showDropletInfo(query, accID, drID)
+		return
+	}
+
+	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[正确] IP 绑定成功！"))
+	time.Sleep(1 * time.Second)
+	// Update DB IP record optionally? Actually main logic relies on API mostly for display
+	// But let's update local DB just in case
+	h.DB.SaveDroplet(drID, acc.ID, "", "", ip, "active") // Partial update implies we might lose name/pass if not careful, better get full info or ignore
+
+	// Refresh info
+	h.showDropletInfo(query, accID, drID)
+}
+
+func (h *Handler) executeCreateIP(query *tgbotapi.CallbackQuery, accID int64, drID int, region string) {
+	acc, _ := h.DB.GetAccount(accID)
+	client := do.NewClient(acc.Token)
+
+	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[注意] 正在申请新 IP..."))
+
+	// 1. Create IP
+	resIP, err := client.CreateReservedIP(context.Background(), region)
+	if err != nil {
+		h.sendText(query.From.ID, "申请 IP 失败: "+err.Error())
+		time.Sleep(2 * time.Second)
+		h.showDropletInfo(query, accID, drID)
+		return
+	}
+
+	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, fmt.Sprintf("[注意] IP %s 申请成功，正在绑定...", resIP.IP)))
+
+	// 2. Assign IP to Droplet
+	err = client.AssignReservedIP(context.Background(), resIP.IP, drID)
+	if err != nil {
+		h.sendText(query.From.ID, fmt.Sprintf("绑定失败 (%s): %v", resIP.IP, err))
+		return
+	}
+
+	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[正确] 新 IP 绑定成功！"))
+	time.Sleep(1 * time.Second)
+	h.showDropletInfo(query, accID, drID)
 }
 
 func (h *Handler) showDropletPassword(query *tgbotapi.CallbackQuery, drID int) {

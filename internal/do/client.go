@@ -68,3 +68,24 @@ func (c *Client) DeleteDroplet(ctx context.Context, id int) error {
 	_, err := c.Droplets.Delete(ctx, id)
 	return err
 }
+
+// Reserved IPs (formerly Floating IPs)
+
+func (c *Client) ListReservedIPs(ctx context.Context) ([]godo.ReservedIP, error) {
+	opt := &godo.ListOptions{PerPage: 200}
+	ips, _, err := c.ReservedIPs.List(ctx, opt)
+	return ips, err
+}
+
+func (c *Client) CreateReservedIP(ctx context.Context, region string) (*godo.ReservedIP, error) {
+	req := &godo.ReservedIPCreateRequest{
+		Region: region,
+	}
+	ip, _, err := c.ReservedIPs.Create(ctx, req)
+	return ip, err
+}
+
+func (c *Client) AssignReservedIP(ctx context.Context, ip string, dropletID int) error {
+	_, _, err := c.ReservedIPActions.Assign(ctx, ip, dropletID)
+	return err
+}
