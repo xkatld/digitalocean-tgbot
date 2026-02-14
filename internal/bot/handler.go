@@ -46,11 +46,12 @@ func (h *Handler) sendMainMenu(chatID int64, text string) {
 }
 
 type CreateState struct {
-	AccountID  int64
-	Region     string
-	Size       string
-	Image      string
-	Name       string
+	AccountID int64
+	Region    string
+	Size      string
+	Image     string
+	Name      string
+	Count     int
 }
 
 var userStates = make(map[int64]*CreateState)
@@ -103,10 +104,24 @@ func (h *Handler) ProcessMessage(m *tgbotapi.Message) {
 	}
 
 	state, exists := userStates[m.From.ID]
-	if exists && state.Image != "" && state.Name == "" {
-		state.Name = m.Text
-		h.confirmCreate(m.From.ID, m.Chat.ID)
-		return
+	if exists {
+		// 输入名称
+		if state.Image != "" && state.Name == "" {
+			state.Name = m.Text
+			h.createDropletStep6(m)
+			return
+		}
+		// 输入数量
+		if state.Name != "" && state.Count == 0 {
+			count, err := strconv.Atoi(m.Text)
+			if err != nil || count < 1 || count > 10 {
+				h.sendText(m.Chat.ID, "请输入有效的数字 (1-10)：")
+				return
+			}
+			state.Count = count
+			h.confirmCreate(m.From.ID, m.Chat.ID)
+			return
+		}
 	}
 
 	token := strings.TrimSpace(m.Text)
@@ -119,8 +134,8 @@ func (h *Handler) confirmCreate(userID int64, chatID int64) {
 	state := userStates[userID]
 	acc, _ := h.DB.GetAccount(state.AccountID)
 
-	text := fmt.Sprintf("<b>确认创建</b>\n\n账号: %s\n地区: %s\n配置: %s\n镜像: %s\n名称: %s",
-		acc.Email, state.Region, state.Size, state.Image, state.Name)
+	text := fmt.Sprintf("<b>确认创建</b>\n\n账号: %s\n地区: %s\n配置: %s\n镜像: %s\n名称: %s\n数量: %d",
+		acc.Email, state.Region, state.Size, state.Image, state.Name, state.Count)
 
 	markup := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -156,7 +171,10 @@ func (h *Handler) HandleCallback(query *tgbotapi.CallbackQuery) {
 	parts := strings.Split(data, ":")
 	cmd := parts[0]
 
-	h.Bot.Request(tgbotapi.NewCallback(query.ID, ""))
+	// 仅对非 Alert 类型的操作立即响应，避免 Alert 消失
+	if cmd != "dr_pass" {
+		h.Bot.Request(tgbotapi.NewCallback(query.ID, ""))
+	}
 
 	switch cmd {
 	case "acc_info":
@@ -188,6 +206,9 @@ func (h *Handler) HandleCallback(query *tgbotapi.CallbackQuery) {
 		accID, _ := strconv.ParseInt(parts[1], 10, 64)
 		drID, _ := strconv.Atoi(parts[2])
 		h.showDropletInfo(query, accID, drID)
+	case "dr_pass":
+		drID, _ := strconv.Atoi(parts[1])
+		h.showDropletPassword(query, drID)
 	case "dr_del":
 		accID, _ := strconv.ParseInt(parts[1], 10, 64)
 		drID, _ := strconv.Atoi(parts[2])
@@ -212,6 +233,9 @@ func (h *Handler) handleCreateBack(query *tgbotapi.CallbackQuery, target string)
 	case "step4":
 		state := userStates[query.From.ID]
 		h.createDropletStep4(query, state.Size)
+	case "step5":
+		state := userStates[query.From.ID]
+		h.createDropletStep5(query, state.Image)
 	}
 }
 
@@ -220,42 +244,65 @@ func (h *Handler) executeCreate(query *tgbotapi.CallbackQuery) {
 	acc, _ := h.DB.GetAccount(state.AccountID)
 	client := do.NewClient(acc.Token)
 
-	password := h.generatePassword(12)
-	userData := fmt.Sprintf("#!/bin/bash\necho root:%s | chpasswd", password)
+	count := state.Count
+	baseName := state.Name
+	region := state.Region
+	size := state.Size
+	image := state.Image
 
-	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[注意] 正在创建实例，请稍候..."))
-
-	droplet, err := client.CreateDroplet(context.Background(), state.Name, state.Region, state.Size, state.Image, userData)
-	if err != nil {
-		h.sendText(query.From.ID, "创建失败: "+err.Error())
-		return
-	}
-
+	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, fmt.Sprintf("[注意] 正在创建 %d 个实例，请稍候...", count)))
 	delete(userStates, query.From.ID)
 
-	go func(dID int, p string) {
-		for {
-			time.Sleep(5 * time.Second)
-			d, err := client.GetDroplet(context.Background(), dID)
-			if err != nil {
-				break
+	go func() {
+		for i := 1; i <= count; i++ {
+			name := baseName
+			if count > 1 {
+				name = fmt.Sprintf("%s-%d", baseName, i)
 			}
-			if d.Status == "active" {
-				var ip string
-				for _, net := range d.Networks.V4 {
-					if net.Type == "public" {
-						ip = net.IPAddress
+			password := h.generatePassword(16)
+			userData := fmt.Sprintf("#!/bin/bash\necho root:%s | chpasswd", password)
+
+			droplet, err := client.CreateDroplet(context.Background(), name, region, size, image, userData)
+			if err != nil {
+				h.sendText(query.From.ID, fmt.Sprintf("创建失败 (%s): %v", name, err))
+				continue
+			}
+
+			// Background wait for IP
+			go func(dID int, p, n string) {
+				for {
+					time.Sleep(5 * time.Second)
+					d, err := client.GetDroplet(context.Background(), dID)
+					if err != nil {
+						break
+					}
+					if d.Status == "active" {
+						var ip string
+						for _, net := range d.Networks.V4 {
+							if net.Type == "public" {
+								ip = net.IPAddress
+								break
+							}
+						}
+
+						// Save to DB
+						h.DB.SaveDroplet(dID, acc.ID, n, p, ip, "active")
+
+						msg := fmt.Sprintf("[正确] <b>实例创建完成</b>\n\n名称: <code>%s</code>\nIP: <code>%s</code>\n密码: <code>%s</code>", n, ip, p)
+						res := tgbotapi.NewMessage(query.From.ID, msg)
+						res.ParseMode = "HTML"
+						h.Bot.Send(res)
 						break
 					}
 				}
-				msg := fmt.Sprintf("[正确] <b>实例创建完成</b>\n\n名称: <code>%s</code>\nIP: <code>%s</code>\n密码: <code>%s</code>", d.Name, ip, p)
-				res := tgbotapi.NewMessage(query.From.ID, msg)
-				res.ParseMode = "HTML"
-				h.Bot.Send(res)
-				break
+			}(droplet.ID, password, name)
+
+			// Simple delay to avoid rate limits
+			if i < count {
+				time.Sleep(2 * time.Second)
 			}
 		}
-	}(droplet.ID, password)
+	}()
 }
 
 func (h *Handler) generatePassword(length int) string {
@@ -416,6 +463,19 @@ func (h *Handler) createDropletStep5(query *tgbotapi.CallbackQuery, image string
 	h.Bot.Send(edit)
 }
 
+func (h *Handler) createDropletStep6(m *tgbotapi.Message) {
+	markup := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回 上一步", "cr_back:step5"),
+			tgbotapi.NewInlineKeyboardButtonData("取消", "cr_cancel"),
+		),
+	)
+	msg := tgbotapi.NewMessage(m.Chat.ID, "<b>创建实例</b>\n请输入批量创建数量 (1-10)：")
+	msg.ParseMode = "HTML"
+	msg.ReplyMarkup = markup
+	h.Bot.Send(msg)
+}
+
 func (h *Handler) showAccountInfo(query *tgbotapi.CallbackQuery, id int64) {
 	acc, err := h.DB.GetAccount(id)
 	if err != nil {
@@ -492,7 +552,9 @@ func (h *Handler) showDropletInfo(query *tgbotapi.CallbackQuery, accID int64, dr
 	acc, _ := h.DB.GetAccount(accID)
 	client := do.NewClient(acc.Token)
 	dr, err := client.GetDroplet(context.Background(), drID)
+	// 如果 API 调用失败（例如实例已删除），尝试从数据库读取
 	if err != nil {
+		// 这里暂不处理纯DB读取，因为API是最新的。如果API失败通常意味着实例不存在或网络问题。
 		h.sendText(query.From.ID, "获取实例详情失败: "+err.Error())
 		return
 	}
@@ -510,7 +572,8 @@ func (h *Handler) showDropletInfo(query *tgbotapi.CallbackQuery, accID int64, dr
 
 	markup := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("删除 实例详情", fmt.Sprintf("dr_del:%d:%d", accID, drID)),
+			tgbotapi.NewInlineKeyboardButtonData("查看密码", fmt.Sprintf("dr_pass:%d", drID)),
+			tgbotapi.NewInlineKeyboardButtonData("删除实例", fmt.Sprintf("dr_del:%d:%d", accID, drID)),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("返回 实例列表", fmt.Sprintf("dr_list:%d", accID)),
@@ -521,6 +584,19 @@ func (h *Handler) showDropletInfo(query *tgbotapi.CallbackQuery, accID int64, dr
 	edit.ParseMode = "HTML"
 	edit.ReplyMarkup = &markup
 	h.Bot.Send(edit)
+}
+
+func (h *Handler) showDropletPassword(query *tgbotapi.CallbackQuery, drID int) {
+	dr, err := h.DB.GetDroplet(drID)
+	if err != nil || dr.Password == "" {
+		cb := tgbotapi.NewCallback(query.ID, "密码未找到或非本机创建")
+		h.Bot.Request(cb)
+		return
+	}
+
+	cb := tgbotapi.NewCallback(query.ID, fmt.Sprintf("Root Pot: %s", dr.Password))
+	cb.ShowAlert = true
+	h.Bot.Request(cb)
 }
 
 func (h *Handler) confirmDeleteDroplet(query *tgbotapi.CallbackQuery, accID int64, drID int) {
@@ -546,6 +622,9 @@ func (h *Handler) executeDeleteDroplet(query *tgbotapi.CallbackQuery, accID int6
 		h.sendText(query.From.ID, "删除失败: "+err.Error())
 		return
 	}
+
+	// 同时清理本地数据库（如果有）
+	h.DB.DeleteDroplet(drID)
 
 	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[正确] 实例删除请求已发送，正在销毁..."))
 	time.Sleep(2 * time.Second)

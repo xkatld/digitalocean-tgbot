@@ -23,11 +23,13 @@ func Init(path string) *DB {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 	CREATE TABLE IF NOT EXISTS droplets (
-		id TEXT PRIMARY KEY,
+		id INTEGER PRIMARY KEY,
 		account_id INTEGER,
 		name TEXT,
+		password TEXT,
 		ip TEXT,
 		status TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY(account_id) REFERENCES accounts(id)
 	);`
 
@@ -73,8 +75,40 @@ func (d *DB) DeleteAccount(id int64) error {
 	return err
 }
 
+// Droplet operations
+
+func (d *DB) SaveDroplet(id int, accountID int64, name, password, ip, status string) error {
+	_, err := d.Conn.Exec("INSERT OR REPLACE INTO droplets (id, account_id, name, password, ip, status) VALUES (?, ?, ?, ?, ?, ?)",
+		id, accountID, name, password, ip, status)
+	return err
+}
+
+func (d *DB) GetDroplet(id int) (*Droplet, error) {
+	var dr Droplet
+	err := d.Conn.QueryRow("SELECT id, account_id, name, password, ip, status FROM droplets WHERE id = ?", id).
+		Scan(&dr.ID, &dr.AccountID, &dr.Name, &dr.Password, &dr.IP, &dr.Status)
+	if err != nil {
+		return nil, err
+	}
+	return &dr, nil
+}
+
+func (d *DB) DeleteDroplet(id int) error {
+	_, err := d.Conn.Exec("DELETE FROM droplets WHERE id = ?", id)
+	return err
+}
+
 type Account struct {
 	ID    int64
 	Email string
 	Token string
+}
+
+type Droplet struct {
+	ID        int
+	AccountID int64
+	Name      string
+	Password  string
+	IP        string
+	Status    string
 }
