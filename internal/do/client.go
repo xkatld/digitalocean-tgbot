@@ -89,3 +89,8 @@ func (c *Client) AssignReservedIP(ctx context.Context, ip string, dropletID int)
 	_, _, err := c.ReservedIPActions.Assign(ctx, ip, dropletID)
 	return err
 }
+
+func (c *Client) DeleteReservedIP(ctx context.Context, ip string) error {
+	_, err := c.ReservedIPs.Delete(ctx, ip)
+	return err
+}

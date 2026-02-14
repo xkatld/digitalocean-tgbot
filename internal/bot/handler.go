@@ -216,7 +216,13 @@ func (h *Handler) HandleCallback(query *tgbotapi.CallbackQuery) {
 	case "dr_del_conf":
 		accID, _ := strconv.ParseInt(parts[1], 10, 64)
 		drID, _ := strconv.Atoi(parts[2])
-		h.executeDeleteDroplet(query, accID, drID)
+		action := parts[3]
+		var ipToDelete string
+		if len(parts) > 5 && parts[4] == "del_ip" { // format: dr_del_conf:acc:dr:del_ip:IP
+			action = "del_ip"
+			ipToDelete = parts[5]
+		}
+		h.executeDeleteDroplet(query, accID, drID, action, ipToDelete)
 	case "dr_rip":
 		accID, _ := strconv.ParseInt(parts[1], 10, 64)
 		drID, _ := strconv.Atoi(parts[2])
@@ -724,13 +730,45 @@ func (h *Handler) showDropletPassword(query *tgbotapi.CallbackQuery, drID int) {
 }
 
 func (h *Handler) confirmDeleteDroplet(query *tgbotapi.CallbackQuery, accID int64, drID int) {
+	acc, _ := h.DB.GetAccount(accID)
+	client := do.NewClient(acc.Token)
+
+	// Check for Attached Reserved IP
+	var attachedIP string
+	ips, err := client.ListReservedIPs(context.Background())
+	if err == nil {
+		for _, ip := range ips {
+			if ip.Droplet != nil && ip.Droplet.ID == drID {
+				attachedIP = ip.IP
+				break
+			}
+		}
+	}
+
 	text := "<b>[注意] 确认删除实例？</b>\n\n此操作不可逆，实例的所有数据将被永久清除。"
-	markup := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("[注意] 确认删除", fmt.Sprintf("dr_del_conf:%d:%d", accID, drID)),
-			tgbotapi.NewInlineKeyboardButtonData("取消", fmt.Sprintf("dr_info:%d:%d", accID, drID)),
-		),
-	)
+	var markup tgbotapi.InlineKeyboardMarkup
+
+	if attachedIP != "" {
+		text += fmt.Sprintf("\n\n[!] 检测到绑定 IP: <code>%s</code>\n未分配的 Reserved IP 将产生费用。", attachedIP)
+		markup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("仅删实例 (保留 IP)", fmt.Sprintf("dr_del_conf:%d:%d:keep", accID, drID)),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("双删 (实例 + IP)", fmt.Sprintf("dr_del_conf:%d:%d:del_ip:%s", accID, drID, attachedIP)),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("取消", fmt.Sprintf("dr_info:%d:%d", accID, drID)),
+			),
+		)
+	} else {
+		markup = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("[注意] 确认删除", fmt.Sprintf("dr_del_conf:%d:%d:keep", accID, drID)),
+				tgbotapi.NewInlineKeyboardButtonData("取消", fmt.Sprintf("dr_info:%d:%d", accID, drID)),
+			),
+		)
+	}
 
 	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, text)
 	edit.ParseMode = "HTML"
@@ -738,19 +776,39 @@ func (h *Handler) confirmDeleteDroplet(query *tgbotapi.CallbackQuery, accID int6
 	h.Bot.Send(edit)
 }
 
-func (h *Handler) executeDeleteDroplet(query *tgbotapi.CallbackQuery, accID int64, drID int) {
+func (h *Handler) executeDeleteDroplet(query *tgbotapi.CallbackQuery, accID int64, drID int, action string, ipToDelete string) {
 	acc, _ := h.DB.GetAccount(accID)
 	client := do.NewClient(acc.Token)
+
+	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[注意]正在发送删除请求..."))
+
 	err := client.DeleteDroplet(context.Background(), drID)
 	if err != nil {
-		h.sendText(query.From.ID, "删除失败: "+err.Error())
+		h.sendText(query.From.ID, "删除实例失败: "+err.Error())
 		return
 	}
 
-	// 同时清理本地数据库（如果有）
+	// 同时清理本地数据库
 	h.DB.DeleteDroplet(drID)
 
-	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[正确] 实例删除请求已发送，正在销毁..."))
+	msgText := "[正确] 实例删除请求已发送，正在销毁..."
+
+	// Handle IP deletion if requested
+	if action == "del_ip" && ipToDelete != "" {
+		go func() {
+			// Wait briefly for unassignment to propagate internally on DO side context
+			time.Sleep(5 * time.Second)
+			err := client.DeleteReservedIP(context.Background(), ipToDelete)
+			if err != nil {
+				h.sendText(query.From.ID, fmt.Sprintf("[错误] IP %s 删除失败 (可能需手动删除): %v", ipToDelete, err))
+			} else {
+				h.sendText(query.From.ID, fmt.Sprintf("[正确] 关联 IP %s 已删除", ipToDelete))
+			}
+		}()
+		msgText += "\n(关联 IP 正在后台删除)"
+	}
+
+	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, msgText))
 	time.Sleep(2 * time.Second)
 	h.listDroplets(query, accID)
 }
