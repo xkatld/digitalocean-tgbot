@@ -94,3 +94,8 @@ func (c *Client) DeleteReservedIP(ctx context.Context, ip string) error {
 	_, err := c.ReservedIPs.Delete(ctx, ip)
 	return err
 }
+
+func (c *Client) UnassignReservedIP(ctx context.Context, ip string) error {
+	_, _, err := c.ReservedIPActions.Unassign(ctx, ip)
+	return err
+}
