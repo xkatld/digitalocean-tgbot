@@ -105,13 +105,11 @@ func (h *Handler) ProcessMessage(m *tgbotapi.Message) {
 
 	state, exists := userStates[m.From.ID]
 	if exists {
-		// 输入名称
 		if state.Image != "" && state.Name == "" {
 			state.Name = m.Text
 			h.createDropletStep6(m)
 			return
 		}
-		// 输入数量
 		if state.Name != "" && state.Count == 0 {
 			count, err := strconv.Atoi(m.Text)
 			if err != nil || count < 1 || count > 10 {
@@ -171,7 +169,6 @@ func (h *Handler) HandleCallback(query *tgbotapi.CallbackQuery) {
 	parts := strings.Split(data, ":")
 	cmd := parts[0]
 
-	// 仅对非 Alert 类型的操作立即响应，避免 Alert 消失
 	if cmd != "dr_pass" {
 		h.Bot.Request(tgbotapi.NewCallback(query.ID, ""))
 	}
@@ -218,7 +215,7 @@ func (h *Handler) HandleCallback(query *tgbotapi.CallbackQuery) {
 		drID, _ := strconv.Atoi(parts[2])
 		action := parts[3]
 		var ipToDelete string
-		if len(parts) > 5 && parts[4] == "del_ip" { // format: dr_del_conf:acc:dr:del_ip:IP
+		if len(parts) > 5 && parts[4] == "del_ip" {
 			action = "del_ip"
 			ipToDelete = parts[5]
 		}
@@ -290,7 +287,6 @@ func (h *Handler) executeCreate(query *tgbotapi.CallbackQuery) {
 				continue
 			}
 
-			// Background wait for IP
 			go func(dID int, p, n string) {
 				for {
 					time.Sleep(5 * time.Second)
@@ -307,7 +303,6 @@ func (h *Handler) executeCreate(query *tgbotapi.CallbackQuery) {
 							}
 						}
 
-						// Save to DB
 						h.DB.SaveDroplet(dID, acc.ID, n, p, ip, "active")
 
 						msg := fmt.Sprintf("[正确] <b>实例创建完成</b>\n\n名称: <code>%s</code>\nIP: <code>%s</code>\n密码: <code>%s</code>", n, ip, p)
@@ -319,7 +314,6 @@ func (h *Handler) executeCreate(query *tgbotapi.CallbackQuery) {
 				}
 			}(droplet.ID, password, name)
 
-			// Simple delay to avoid rate limits
 			if i < count {
 				time.Sleep(2 * time.Second)
 			}
@@ -574,9 +568,7 @@ func (h *Handler) showDropletInfo(query *tgbotapi.CallbackQuery, accID int64, dr
 	acc, _ := h.DB.GetAccount(accID)
 	client := do.NewClient(acc.Token)
 	dr, err := client.GetDroplet(context.Background(), drID)
-	// 如果 API 调用失败（例如实例已删除），尝试从数据库读取
 	if err != nil {
-		// 这里暂不处理纯DB读取，因为API是最新的。如果API失败通常意味着实例不存在或网络问题。
 		h.sendText(query.From.ID, "获取实例详情失败: "+err.Error())
 		return
 	}
@@ -589,8 +581,22 @@ func (h *Handler) showDropletInfo(query *tgbotapi.CallbackQuery, accID int64, dr
 		}
 	}
 
-	text := fmt.Sprintf("<b>实例详情</b>\n\n名称: <code>%s</code>\nIP: <code>%s</code>\n地区: %s\n配置: %s\n状态: %s",
-		dr.Name, ip, dr.Region.Slug, dr.SizeSlug, dr.Status)
+	var reservedIP string
+	ips, err := client.ListReservedIPs(context.Background())
+	if err == nil {
+		for _, rip := range ips {
+			if rip.Droplet != nil && rip.Droplet.ID == drID {
+				reservedIP = rip.IP
+				break
+			}
+		}
+	}
+
+	text := fmt.Sprintf("<b>实例详情</b>\n\n名称: <code>%s</code>\n主 IP: <code>%s</code>", dr.Name, ip)
+	if reservedIP != "" {
+		text += fmt.Sprintf("\n附加 IP: <code>%s</code> (Reserved)", reservedIP)
+	}
+	text += fmt.Sprintf("\n地区: %s\n配置: %s\n状态: %s", dr.Region.Slug, dr.SizeSlug, dr.Status)
 
 	markup := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -600,6 +606,7 @@ func (h *Handler) showDropletInfo(query *tgbotapi.CallbackQuery, accID int64, dr
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("删除实例", fmt.Sprintf("dr_del:%d:%d", accID, drID)),
 		),
+
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("返回 实例列表", fmt.Sprintf("dr_list:%d", accID)),
 		),
@@ -632,38 +639,31 @@ func (h *Handler) listReservedIPs(query *tgbotapi.CallbackQuery, accID int64, dr
 
 	markup := tgbotapi.NewInlineKeyboardMarkup()
 
-	// Categorize IPs
 	for _, ip := range ips {
 		if ip.Region.Slug != dr.Region.Slug {
-			continue // Only same region
+			continue
 		}
 
 		var btnText, btnData string
 		if ip.Droplet != nil {
 			if ip.Droplet.ID == drID {
-				// Attached to THIS droplet
-				btnText = fmt.Sprintf("✅ %s (本机已绑定)", ip.IP)
+				btnText = fmt.Sprintf("[正确] %s (本机已绑定)", ip.IP)
 				btnData = fmt.Sprintf("rip_unassign:%d:%d:%s", accID, drID, ip.IP)
-				// Option: Unassign
 				markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
 					tgbotapi.NewInlineKeyboardButtonData(btnText, "ignore"),
 					tgbotapi.NewInlineKeyboardButtonData("[解绑]", btnData),
 				))
 			} else {
-				// Attached to OTHER droplet
-				btnText = fmt.Sprintf("🔴 %s (占: %s)", ip.IP, ip.Droplet.Name)
+				btnText = fmt.Sprintf("[错误] %s (占: %s)", ip.IP, ip.Droplet.Name)
 				btnData = fmt.Sprintf("rip_assign:%d:%d:%s", accID, drID, ip.IP)
-				// Option: Reassign (Steal)
 				markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
 					tgbotapi.NewInlineKeyboardButtonData(btnText, btnData),
 					tgbotapi.NewInlineKeyboardButtonData("[抢占]", btnData),
 				))
 			}
 		} else {
-			// Free
-			btnText = fmt.Sprintf("⚪ %s (空闲)", ip.IP)
+			btnText = fmt.Sprintf("[注意] %s (空闲)", ip.IP)
 			btnData = fmt.Sprintf("rip_assign:%d:%d:%s", accID, drID, ip.IP)
-			// Option: Assign
 			markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonData(btnText, btnData),
 				tgbotapi.NewInlineKeyboardButtonData("[绑定]", btnData),
@@ -671,7 +671,6 @@ func (h *Handler) listReservedIPs(query *tgbotapi.CallbackQuery, accID int64, dr
 		}
 	}
 
-	// Add Create New option
 	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData("[+ 申请新 IP 并绑定]", fmt.Sprintf("rip_create:%d:%d:%s", accID, drID, dr.Region.Slug)),
 	))
@@ -702,7 +701,6 @@ func (h *Handler) executeAssignIP(query *tgbotapi.CallbackQuery, accID int64, dr
 
 	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[正确] IP 绑定成功！"))
 	time.Sleep(1 * time.Second)
-	// Refresh list to show updated status
 	h.listReservedIPs(query, accID, drID)
 }
 
@@ -771,7 +769,6 @@ func (h *Handler) confirmDeleteDroplet(query *tgbotapi.CallbackQuery, accID int6
 	acc, _ := h.DB.GetAccount(accID)
 	client := do.NewClient(acc.Token)
 
-	// Check for Attached Reserved IP
 	var attachedIP string
 	ips, err := client.ListReservedIPs(context.Background())
 	if err == nil {
@@ -826,38 +823,37 @@ func (h *Handler) executeDeleteDroplet(query *tgbotapi.CallbackQuery, accID int6
 		return
 	}
 
-	// 同时清理本地数据库
 	h.DB.DeleteDroplet(drID)
 
 	msgText := "[正确] 实例删除请求已发送，正在销毁..."
 
-	// Handle IP deletion if requested
 	if action == "del_ip" && ipToDelete != "" {
 		go func() {
-			// Wait briefly for unassignment to propagate internally on DO side context
 			time.Sleep(5 * time.Second)
 			err := client.DeleteReservedIP(context.Background(), ipToDelete)
 			if err != nil {
-				h.sendText(query.From.ID, fmt.Sprintf("[错误] IP %s 删除失败 (可能需手动删除): %v", ipToDelete, err))
+				h.sendText(query.From.ID, fmt.Sprintf("[错误] IP 删除失败 (%s): %v", ipToDelete, err))
 			} else {
-				h.sendText(query.From.ID, fmt.Sprintf("[正确] 关联 IP %s 已删除", ipToDelete))
+				h.sendText(query.From.ID, fmt.Sprintf("[正确] IP 删除成功: %s", ipToDelete))
 			}
 		}()
 		msgText += "\n(关联 IP 正在后台删除)"
 	}
 
 	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, msgText))
-	time.Sleep(2 * time.Second)
-	h.listDroplets(query, accID)
-}
-
-func (h *Handler) deleteAccount(query *tgbotapi.CallbackQuery, id int64) {
-	h.DB.DeleteAccount(id)
-	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "账号已删除")
-	h.Bot.Send(edit)
 }
 
 func (h *Handler) sendText(chatID int64, text string) {
 	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "HTML"
 	h.Bot.Send(msg)
+}
+
+func (h *Handler) deleteAccount(query *tgbotapi.CallbackQuery, id int64) {
+	err := h.DB.DeleteAccount(id)
+	if err != nil {
+		h.sendText(query.From.ID, "删除账号失败")
+		return
+	}
+	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[正确] 账号已删除"))
 }

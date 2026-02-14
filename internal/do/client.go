@@ -69,8 +69,6 @@ func (c *Client) DeleteDroplet(ctx context.Context, id int) error {
 	return err
 }
 
-// Reserved IPs (formerly Floating IPs)
-
 func (c *Client) ListReservedIPs(ctx context.Context) ([]godo.ReservedIP, error) {
 	opt := &godo.ListOptions{PerPage: 200}
 	ips, _, err := c.ReservedIPs.List(ctx, opt)

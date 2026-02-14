@@ -75,8 +75,6 @@ func (d *DB) DeleteAccount(id int64) error {
 	return err
 }
 
-// Droplet operations
-
 func (d *DB) SaveDroplet(id int, accountID int64, name, password, ip, status string) error {
 	_, err := d.Conn.Exec("INSERT OR REPLACE INTO droplets (id, account_id, name, password, ip, status) VALUES (?, ?, ?, ?, ?, ?)",
 		id, accountID, name, password, ip, status)
