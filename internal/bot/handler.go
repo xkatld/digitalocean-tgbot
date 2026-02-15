@@ -295,6 +295,8 @@ func (h *Handler) executeCreate(query *tgbotapi.CallbackQuery) {
 				continue
 			}
 
+			h.DB.SaveDroplet(droplet.ID, acc.ID, name, password, "", "new")
+
 			go func(dID int, p, n string) {
 				for {
 					time.Sleep(5 * time.Second)
@@ -604,6 +606,11 @@ func (h *Handler) showDropletInfo(query *tgbotapi.CallbackQuery, accID int64, dr
 	if reservedIP != "" {
 		text += fmt.Sprintf("\n附加 IP: <code>%s</code> (Reserved)", reservedIP)
 	}
+
+	if localDr, err := h.DB.GetDroplet(drID); err == nil && localDr.Password != "" {
+		text += fmt.Sprintf("\n密码: <code>%s</code>", localDr.Password)
+	}
+
 	text += fmt.Sprintf("\n地区: %s\n配置: %s\n状态: %s", dr.Region.Slug, dr.SizeSlug, dr.Status)
 
 	markup := tgbotapi.NewInlineKeyboardMarkup(
@@ -805,7 +812,7 @@ func (h *Handler) showDropletPassword(query *tgbotapi.CallbackQuery, drID int) {
 		return
 	}
 
-	cb := tgbotapi.NewCallback(query.ID, fmt.Sprintf("Root Pot: %s", dr.Password))
+	cb := tgbotapi.NewCallback(query.ID, fmt.Sprintf("Root Pwd: %s", dr.Password))
 	cb.ShowAlert = true
 	h.Bot.Request(cb)
 }
