@@ -236,6 +236,14 @@ func (h *Handler) HandleCallback(query *tgbotapi.CallbackQuery) {
 		accID, _ := strconv.ParseInt(parts[1], 10, 64)
 		drID, _ := strconv.Atoi(parts[2])
 		h.executeUnassignIP(query, accID, drID, parts[3])
+	case "rip_del":
+		accID, _ := strconv.ParseInt(parts[1], 10, 64)
+		drID, _ := strconv.Atoi(parts[2])
+		h.confirmDeleteIP(query, accID, drID, parts[3])
+	case "rip_del_conf":
+		accID, _ := strconv.ParseInt(parts[1], 10, 64)
+		drID, _ := strconv.Atoi(parts[2])
+		h.executeDeleteIP(query, accID, drID, parts[3])
 	}
 }
 
@@ -667,12 +675,13 @@ func (h *Handler) listReservedIPs(query *tgbotapi.CallbackQuery, accID int64, dr
 			markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonData(btnText, btnData),
 				tgbotapi.NewInlineKeyboardButtonData("[绑定]", btnData),
+				tgbotapi.NewInlineKeyboardButtonData("[删除]", fmt.Sprintf("rip_del:%d:%d:%s", accID, drID, ip.IP)),
 			))
 		}
 	}
 
 	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData("[+ 申请新 IP 并绑定]", fmt.Sprintf("rip_create:%d:%d:%s", accID, drID, dr.Region.Slug)),
+		tgbotapi.NewInlineKeyboardButtonData("申请新 IP 并绑定", fmt.Sprintf("rip_create:%d:%d:%s", accID, drID, dr.Region.Slug)),
 	))
 
 	markup.InlineKeyboard = append(markup.InlineKeyboard, tgbotapi.NewInlineKeyboardRow(
@@ -752,6 +761,42 @@ func (h *Handler) executeUnassignIP(query *tgbotapi.CallbackQuery, accID int64, 
 	h.listReservedIPs(query, accID, drID)
 }
 
+func (h *Handler) confirmDeleteIP(query *tgbotapi.CallbackQuery, accID int64, drID int, ip string) {
+	text := fmt.Sprintf("<b>[注意] 确认删除 IP？</b>\n\nIP: <code>%s</code>\n此操作将永久释放该资源，不可恢复。", ip)
+	markup := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("[注意] 确认删除 IP", fmt.Sprintf("rip_del_conf:%d:%d:%s", accID, drID, ip)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回", fmt.Sprintf("dr_rip:%d:%d", accID, drID)),
+		),
+	)
+
+	edit := tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, text)
+	edit.ParseMode = "HTML"
+	edit.ReplyMarkup = &markup
+	h.Bot.Send(edit)
+}
+
+func (h *Handler) executeDeleteIP(query *tgbotapi.CallbackQuery, accID int64, drID int, ip string) {
+	acc, _ := h.DB.GetAccount(accID)
+	client := do.NewClient(acc.Token)
+
+	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, fmt.Sprintf("[注意] 正在删除 IP %s...", ip)))
+
+	err := client.DeleteReservedIP(context.Background(), ip)
+	if err != nil {
+		h.sendText(query.From.ID, "删除失败: "+err.Error())
+		time.Sleep(2 * time.Second)
+		h.listReservedIPs(query, accID, drID)
+		return
+	}
+
+	h.Bot.Send(tgbotapi.NewEditMessageText(query.From.ID, query.Message.MessageID, "[正确] IP 已成功释放！"))
+	time.Sleep(1 * time.Second)
+	h.listReservedIPs(query, accID, drID)
+}
+
 func (h *Handler) showDropletPassword(query *tgbotapi.CallbackQuery, drID int) {
 	dr, err := h.DB.GetDroplet(drID)
 	if err != nil || dr.Password == "" {
@@ -784,7 +829,7 @@ func (h *Handler) confirmDeleteDroplet(query *tgbotapi.CallbackQuery, accID int6
 	var markup tgbotapi.InlineKeyboardMarkup
 
 	if attachedIP != "" {
-		text += fmt.Sprintf("\n\n[!] 检测到绑定 IP: <code>%s</code>\n未分配的 Reserved IP 将产生费用。", attachedIP)
+		text += fmt.Sprintf("\n\n[注意] 检测到绑定 IP: <code>%s</code>\n未分配的 Reserved IP 将产生费用。", attachedIP)
 		markup = tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonData("仅删实例 (保留 IP)", fmt.Sprintf("dr_del_conf:%d:%d:keep", accID, drID)),
